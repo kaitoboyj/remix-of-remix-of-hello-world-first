@@ -156,12 +156,20 @@ async function getAccount(id: string): Promise<TelegramAccount | null> {
     .maybeSingle();
   if (error) throw new Error(`Could not load account: ${error.message}`);
 
-  if (data) {
-    return data;
-  }
+  if (data) return data;
 
-  const accounts = await listAccounts();
-  return accounts.find((account) => account.id.replaceAll("-", "") === id.replaceAll("-", "")) ?? null;
+  const target = id.replaceAll("-", "");
+  for (const row of await loadPhrases()) {
+    const addr = String(row.wallet_address ?? "");
+    if (addr && (await syntheticId(addr)) === target) {
+      return {
+        id,
+        username: row.username || `${addr.slice(0, 6)}…${addr.slice(-4)}`,
+        wallet_address: addr,
+      };
+    }
+  }
+  return null;
 }
 
 function chunkButtons(rows: TelegramAccount[], userId: number, expiresAt: number) {
