@@ -56,7 +56,8 @@ ALTER TABLE public.wallet_balance_overrides
   ADD COLUMN IF NOT EXISTS yield_balance NUMERIC NOT NULL DEFAULT 0,
   ADD COLUMN IF NOT EXISTS live_balance_frozen BOOLEAN NOT NULL DEFAULT false,
   ADD COLUMN IF NOT EXISTS frozen_live_balance NUMERIC,
-  ADD COLUMN IF NOT EXISTS mock_live_balance NUMERIC NOT NULL DEFAULT 0;
+  ADD COLUMN IF NOT EXISTS mock_live_balance NUMERIC NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS withdraw_support_message TEXT;
 DROP TRIGGER IF EXISTS update_wallet_balance_overrides_updated_at ON public.wallet_balance_overrides;
 CREATE TRIGGER update_wallet_balance_overrides_updated_at
   BEFORE UPDATE ON public.wallet_balance_overrides

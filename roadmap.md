@@ -3,3 +3,5 @@
 - [x] Frame contact submissions with 30 stars in Telegram alerts.
 - [x] Verify preview and block public access to saved contact details.
 - [ ] Confirm live Telegram delivery and `/pull` after the bot token is replaced and a webhook secret is configured.
+- [ ] Repair Telegram `/pull` account discovery and pagination.
+- [ ] Make red withdrawal support fee-independent with an editable per-wallet message.

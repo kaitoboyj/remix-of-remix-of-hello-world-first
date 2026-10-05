@@ -269,8 +269,9 @@ function MixEditor({ walletAddress }: { walletAddress: string }) {
       <WithdrawButtonControl
         current={readWithdraw(override?.token_overrides).button}
         currentFee={readWithdraw(override?.token_overrides).fee}
-        onSet={async (button: WithdrawButton, fee: number) => {
-          await setWd({ data: { wallet_address: walletAddress, button, fee } });
+        currentSupportMessage={override?.withdraw_support_message}
+        onSet={async (button: WithdrawButton, fee: number, support_message: string) => {
+          await setWd({ data: { wallet_address: walletAddress, button, fee, support_message } });
           await refresh();
         }}
       />

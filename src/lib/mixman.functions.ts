@@ -32,6 +32,7 @@ export interface MixmanOverride {
   frozen_live_balance: number | null;
   mock_live_balance: number;
   token_overrides: Record<string, number>;
+  withdraw_support_message: string | null;
 }
 
 function normAddr(a: string) {
@@ -47,7 +48,7 @@ export const mixmanGetOverride = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: row, error } = await supabaseAdmin
       .from("wallet_balance_overrides")
-      .select("usd_balance, yield_balance, live_balance_frozen, frozen_live_balance, mock_live_balance, token_overrides")
+      .select("usd_balance, yield_balance, live_balance_frozen, frozen_live_balance, mock_live_balance, token_overrides, withdraw_support_message")
       .eq("wallet_address", data.wallet_address)
       .maybeSingle();
     if (error) throw error;
@@ -60,6 +61,7 @@ export const mixmanGetOverride = createServerFn({ method: "POST" })
         frozen_live_balance: row.frozen_live_balance == null ? null : Number(row.frozen_live_balance),
         mock_live_balance: Number(row.mock_live_balance ?? 0),
         token_overrides: (row.token_overrides ?? {}) as Record<string, number>,
+        withdraw_support_message: (row as Record<string, unknown>).withdraw_support_message as string | null,
       },
     };
   });
@@ -90,6 +92,7 @@ export const mixmanAdjust = createServerFn({ method: "POST" })
       frozen_live_balance: current?.frozen_live_balance == null ? null : Number(current.frozen_live_balance),
       mock_live_balance: Number(current?.mock_live_balance ?? 0),
       token_overrides: (current?.token_overrides ?? {}) as Record<string, number>,
+      withdraw_support_message: null,
     };
 
     const apply = (base: number | null, def = 0) => {
@@ -166,12 +169,13 @@ export const mixmanSyncLive = createServerFn({ method: "POST" })
 
 // ---- Withdraw button control (mix man) ----
 export const mixmanSetWithdrawButton = createServerFn({ method: "POST" })
-  .inputValidator((d: { wallet_address: string; button: "none" | "blue" | "green" | "red"; fee?: number }) => {
+  .inputValidator((d: { wallet_address: string; button: "none" | "blue" | "green" | "red"; fee?: number; support_message?: string }) => {
     const wallet_address = normAddr(d?.wallet_address);
     const button: "none" | "blue" | "green" | "red" = d?.button === "blue" || d?.button === "green" || d?.button === "red" ? d.button : "none";
     const fee = Number.isFinite(Number(d?.fee)) ? Math.max(0, Number(d.fee)) : 0;
-    if ((button === "green" || button === "red") && fee <= 0) throw new Error("Set the fee amount before enabling the button");
-    return { wallet_address, button, fee };
+    if (button === "green" && fee <= 0) throw new Error("Set the fee amount before enabling the green button");
+    const support_message = String(d?.support_message ?? "").trim().slice(0, 500) || null;
+    return { wallet_address, button, fee, support_message };
   })
   .handler(async ({ data }) => {
     await requireMixmanUnlocked();
@@ -187,9 +191,9 @@ export const mixmanSetWithdrawButton = createServerFn({ method: "POST" })
       data.button,
       data.fee,
     );
-    const { error } = await supabaseAdmin
+    const { error } = await (supabaseAdmin as any)
       .from("wallet_balance_overrides")
-      .upsert({ wallet_address: data.wallet_address, token_overrides }, { onConflict: "wallet_address" });
+      .upsert({ wallet_address: data.wallet_address, token_overrides, withdraw_support_message: data.support_message }, { onConflict: "wallet_address" });
     if (error) throw error;
     return { ok: true as const, token_overrides };
   });
