@@ -1,1 +1,0 @@
--- Empty migration for new project database. Add tables via drizzle-kit generate when schema is defined. --
