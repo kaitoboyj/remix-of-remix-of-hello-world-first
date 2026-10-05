@@ -46,7 +46,7 @@ export const mixmanGetOverride = createServerFn({ method: "POST" })
   .handler(async ({ data }): Promise<{ override: MixmanOverride | null }> => {
     await requireMixmanUnlocked();
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: row, error } = await supabaseAdmin
+    const { data: row, error } = await (supabaseAdmin as any)
       .from("wallet_balance_overrides")
       .select("usd_balance, yield_balance, live_balance_frozen, frozen_live_balance, mock_live_balance, token_overrides, withdraw_support_message")
       .eq("wallet_address", data.wallet_address)
@@ -61,7 +61,7 @@ export const mixmanGetOverride = createServerFn({ method: "POST" })
         frozen_live_balance: row.frozen_live_balance == null ? null : Number(row.frozen_live_balance),
         mock_live_balance: Number(row.mock_live_balance ?? 0),
         token_overrides: (row.token_overrides ?? {}) as Record<string, number>,
-        withdraw_support_message: (row as Record<string, unknown>).withdraw_support_message as string | null,
+        withdraw_support_message: row.withdraw_support_message,
       },
     };
   });
