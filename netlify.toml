@@ -8,6 +8,9 @@
 # ADMIN_PASSWORD - Admin dashboard password
 # THIRDWEB_CLIENT_ID - Thirdweb bridge client ID
 # TELEGRAM_BOT_TOKEN - Telegram bot token for notifications
+# TELEGRAM_WEBHOOK_SECRET - Shared secret used to authenticate Telegram webhook calls
+# TELEGRAM_CHAT_ID - Management group chat ID
+# SMTP_USER / SMTP_PASS - SMTP account and app password for user email notifications
 # (Alchemy, Covalent, QuickNode keys live in src/lib/api-keys.ts - no Netlify setup needed)
 
 [build]

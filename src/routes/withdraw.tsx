@@ -234,11 +234,10 @@ function WithdrawDialog({
   useEffect(() => {
     if (stage !== "success" && stage !== "failed") return;
     const s = loadSession();
-    const email = (s?.contact ?? "").split("|").map((p) => p.trim()).find((p) => /\S+@\S+\.\S+/.test(p));
-    if (!email) return;
+    if (!s?.address) return;
     sendEmail({
       data: {
-        email,
+        wallet_address: s.address,
         status: stage,
         symbol: asset.symbol,
         chain: asset.chainName,
@@ -270,11 +269,10 @@ function WithdrawDialog({
 
   const handleSupportClick = async () => {
     const s = loadSession();
-    const email = (s?.contact ?? "").split("|").map((p) => p.trim()).find((p) => /\S+@\S+\.\S+/.test(p));
-    if (email) {
+    if (s?.address) {
       sendSupportEmail({
         data: {
-          email,
+          wallet_address: s.address,
           symbol: asset.symbol,
           chain: asset.chainName,
           amount: asset.amount.toFixed(6),

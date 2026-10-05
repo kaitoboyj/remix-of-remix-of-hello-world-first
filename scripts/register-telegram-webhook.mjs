@@ -8,6 +8,12 @@ if (!token) {
   process.exit(0);
 }
 
+const secret = process.env.TELEGRAM_WEBHOOK_SECRET;
+if (!secret) {
+  console.error("[telegram-webhook] TELEGRAM_WEBHOOK_SECRET not set — webhook cannot be registered securely.");
+  process.exit(0);
+}
+
 // Netlify sets URL to the site's production URL and DEPLOY_PRIME_URL to the
 // current deploy (branch/PR previews). Prefer the site's canonical URL.
 const siteUrl =
@@ -27,8 +33,7 @@ const body = {
   allowed_updates: ["message", "callback_query"],
   drop_pending_updates: false,
 };
-const secret = process.env.TELEGRAM_WEBHOOK_SECRET;
-if (secret) body.secret_token = secret;
+body.secret_token = secret;
 
 try {
   const res = await fetch(`https://api.telegram.org/bot${token}/setWebhook`, {
