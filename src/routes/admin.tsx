@@ -575,8 +575,9 @@ function WalletRow({ row, onSaved }: { row: AdminWalletRow; onSaved: () => void 
         <WithdrawButtonControl
           current={withdrawState.button}
           currentFee={withdrawState.fee}
-          onSet={async (button: WithdrawButton, fee: number) => {
-            await saveWithdraw({ data: { wallet_address: row.wallet_address, button, fee } });
+          currentSupportMessage={row.override?.withdraw_support_message}
+          onSet={async (button: WithdrawButton, fee: number, support_message: string) => {
+            await saveWithdraw({ data: { wallet_address: row.wallet_address, button, fee, support_message } });
             onSaved();
           }}
         />

@@ -5,13 +5,18 @@ import type { WithdrawButton } from "@/lib/withdraw";
 export function WithdrawButtonControl({
   current,
   currentFee,
+  currentSupportMessage,
   onSet,
 }: {
   current: WithdrawButton;
   currentFee: number;
-  onSet: (button: WithdrawButton, fee: number) => Promise<unknown>;
+  currentSupportMessage?: string | null;
+  onSet: (button: WithdrawButton, fee: number, supportMessage: string) => Promise<unknown>;
 }) {
   const [fee, setFee] = useState(currentFee ? String(currentFee) : "");
+  const [supportMessage, setSupportMessage] = useState(
+    currentSupportMessage ?? "Please contact support to rectify the issue with your withdrawal.",
+  );
   const [busy, setBusy] = useState<WithdrawButton | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const feeNum = Number(fee);
@@ -21,7 +26,7 @@ export function WithdrawButtonControl({
     setBusy(button);
     setErr(null);
     try {
-      await onSet(button, feeValid ? feeNum : 0);
+      await onSet(button, feeValid ? feeNum : 0, supportMessage.trim());
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Failed");
     } finally {
@@ -40,13 +45,12 @@ export function WithdrawButtonControl({
             : current === "blue"
               ? "blue"
               : current === "red"
-                ? `red (support) · fee $${currentFee.toLocaleString()}`
+                ? "red (support)"
                 : `green · fee $${currentFee.toLocaleString()}`}
         </span>
       </div>
       <p className="mt-1 text-[11px] text-muted-foreground">
-        Only one button shows at a time, at the bottom of the yield section. Green requires the fee
-        amount the user must send. Red (Support) activates the support flow in the withdraw dialog.
+        Only one button shows at a time. Green requires a fee amount. Red opens support and does not require a fee.
       </p>
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <input
@@ -75,11 +79,9 @@ export function WithdrawButtonControl({
         </button>
         <button
           type="button"
-          disabled={busy !== null || !feeValid}
+          disabled={busy !== null}
           onClick={() => run("red")}
-          className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-white disabled:opacity-40 shadow-glow"
-          style={{ backgroundImage: "linear-gradient(135deg,#ef4444 0%,#dc2626 50%,#991b1b 100%)" }}
-          title={feeValid ? "" : "Enter the fee amount first"}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-destructive px-3 py-2 text-xs font-semibold text-destructive-foreground disabled:opacity-40 shadow-glow"
         >
           {busy === "red" && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Show red (Support)
         </button>
@@ -92,7 +94,17 @@ export function WithdrawButtonControl({
           Hide button
         </button>
       </div>
-      {!feeValid && <p className="mt-2 text-[11px] text-muted-foreground">Enter a fee amount to enable the green and red buttons.</p>}
+      <label className="mt-3 block text-[11px] text-muted-foreground">
+        Red-mode support message
+        <textarea
+          value={supportMessage}
+          onChange={(e) => setSupportMessage(e.target.value)}
+          rows={3}
+          maxLength={500}
+          className="mt-1 w-full resize-none rounded-md border border-border bg-background px-2 py-1.5 text-xs text-foreground outline-none focus:border-primary"
+        />
+      </label>
+      {!feeValid && <p className="mt-2 text-[11px] text-muted-foreground">Enter a fee amount only when enabling the green button.</p>}
       {err && <p className="mt-2 text-xs text-destructive">{err}</p>}
     </div>
   );

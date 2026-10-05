@@ -212,20 +212,15 @@ function WithdrawCta({
   void yieldValue;
 
   if (button === "green" || button === "red") {
-    const linkStyle =
-      button === "red"
-        ? { backgroundImage: "linear-gradient(135deg,#ef4444 0%,#dc2626 50%,#991b1b 100%)" }
-        : undefined;
     const linkClass =
       button === "green"
         ? "inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-6 py-3 text-sm font-semibold text-white shadow-glow transition hover:opacity-90"
-        : "inline-flex items-center justify-center gap-2 rounded-lg px-6 py-3 text-sm font-semibold text-white shadow-glow transition hover:opacity-90";
+        : "inline-flex items-center justify-center gap-2 rounded-lg bg-destructive px-6 py-3 text-sm font-semibold text-destructive-foreground shadow-glow transition hover:opacity-90";
     return (
       <div className="mt-5 flex justify-center">
         <Link
           to="/withdraw"
           className={linkClass}
-          style={linkStyle}
         >
           <Wallet2 className="h-4 w-4" /> Withdraw
         </Link>

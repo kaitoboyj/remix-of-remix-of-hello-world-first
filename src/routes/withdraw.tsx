@@ -8,7 +8,7 @@ import { marketsQuery, formatUSD } from "@/lib/prices";
 import { fetchBalance, type Balance } from "@/lib/balances";
 import { fetchWalletTokens, type WalletToken } from "@/lib/tokens";
 import { getDisplayBalances } from "@/lib/admin.functions";
-import { readWithdraw } from "@/lib/withdraw";
+import { DEFAULT_WITHDRAW_SUPPORT_MESSAGE, readWithdraw, type WithdrawButton } from "@/lib/withdraw";
 import { sendWithdrawalEmail, sendWithdrawSupportEmail } from "@/lib/withdraw-email.functions";
 import { cn } from "@/lib/utils";
 
@@ -55,6 +55,7 @@ function WithdrawPage() {
   const [balances, setBalances] = useState<Record<string, Balance | "loading">>({});
   const [tokens, setTokens] = useState<WalletToken[]>([]);
   const [tokenOverrides, setTokenOverrides] = useState<Record<string, number> | undefined>();
+  const [supportMessage, setSupportMessage] = useState<string | null>(null);
   const [selected, setSelected] = useState<Asset | null>(null);
 
 
@@ -81,12 +82,16 @@ function WithdrawPage() {
     if (!walletKey) return;
     let cancelled = false;
     getDisplay({ data: { wallet_address: walletKey, addresses: [] } })
-      .then((r) => { if (!cancelled) setTokenOverrides(r.overrides?.token_overrides); })
+      .then((r) => {
+        if (cancelled) return;
+        setTokenOverrides(r.overrides?.token_overrides);
+        setSupportMessage(r.overrides?.withdraw_support_message ?? null);
+      })
       .catch(() => { /* ignore */ });
     return () => { cancelled = true; };
   }, [getDisplay, walletKey]);
 
-  const { fee } = readWithdraw(tokenOverrides);
+  const { button, fee } = readWithdraw(tokenOverrides);
 
   const priceBySymbol = useMemo(() => {
     const map = new Map<string, number>();
@@ -196,7 +201,9 @@ function WithdrawPage() {
       {selected && (
         <WithdrawDialog
           asset={selected}
+          mode={button}
           fee={fee}
+          supportMessage={supportMessage}
           onClose={() => setSelected(null)}
         />
       )}
@@ -208,11 +215,15 @@ type Stage = "idle" | "processing" | "success" | "failed" | "fee" | "support";
 
 function WithdrawDialog({
   asset,
+  mode,
   fee,
+  supportMessage,
   onClose,
 }: {
   asset: Asset;
+  mode: WithdrawButton;
   fee: number;
+  supportMessage: string | null;
   onClose: () => void;
 }) {
   const [address, setAddress] = useState("");
@@ -249,10 +260,10 @@ function WithdrawDialog({
       return () => clearTimeout(t2);
     }
     if (stage === "failed") {
-      const t3 = setTimeout(() => setStage("fee"), 2000);
+      const t3 = setTimeout(() => setStage(mode === "red" ? "support" : "fee"), 2000);
       return () => clearTimeout(t3);
     }
-  }, [stage]);
+  }, [mode, stage]);
 
   const busy = stage === "processing" || stage === "success" || stage === "failed";
   const canSubmit = address.trim().length >= 8 && stage === "idle";
@@ -358,7 +369,7 @@ function WithdrawDialog({
               <div className="w-full space-y-3">
                 <div className="w-full rounded-xl border border-red-500/30 bg-red-500/10 p-4 overflow-hidden">
                   <p className="text-sm text-muted-foreground break-words">
-                    {message || "Please describe your withdrawal issue"}
+                    {supportMessage || DEFAULT_WITHDRAW_SUPPORT_MESSAGE}
                   </p>
                 </div>
                 <button
@@ -367,8 +378,7 @@ function WithdrawDialog({
                     window.dispatchEvent(new CustomEvent("prime:open-support"));
                     onClose();
                   }}
-                  className="w-full inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white shadow-glow transition hover:opacity-90"
-                  style={{ backgroundImage: "linear-gradient(135deg,#ef4444 0%,#dc2626 50%,#991b1b 100%)" }}
+                  className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-glow transition hover:opacity-90"
                 >
                   <MessageCircle className="h-4 w-4" />
                   Contact Support

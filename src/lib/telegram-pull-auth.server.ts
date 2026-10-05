@@ -1,8 +1,10 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { adminSessionSecret } from "./admin.server";
 
-const CALLBACK_PREFIX = "acct";
-const SIGNATURE_BYTES = 8;
+const CALLBACK_PREFIX = "a";
+// Telegram callback_data is capped at 64 bytes. Six signature bytes still
+// provide a strong short-lived MAC while keeping the largest payload below it.
+const SIGNATURE_BYTES = 6;
 
 interface AccountCallback {
   accountId: string;
