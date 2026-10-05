@@ -82,6 +82,7 @@ export const registerTelegramWebhook = createServerFn({ method: "POST" }).handle
     await requireAdminUnlocked();
     const token = process.env["TELEGRAM_BOT_TOKEN"];
     const expectedUrl = `${siteOrigin()}/api/public/telegram/webhook`;
+    const secret = process.env["TELEGRAM_WEBHOOK_SECRET"];
     if (!token) {
       return {
         configured: false,
@@ -92,12 +93,21 @@ export const registerTelegramWebhook = createServerFn({ method: "POST" }).handle
         message: "Telegram bot token is not set on this deployment.",
       };
     }
+    if (!secret) {
+      return {
+        configured: false,
+        url: null,
+        expectedUrl,
+        pending: null,
+        lastError: null,
+        message: "Telegram webhook secret is not set on this deployment.",
+      };
+    }
     const body: Record<string, unknown> = {
       url: expectedUrl,
       allowed_updates: ["message", "callback_query"],
     };
-    const secret = process.env["TELEGRAM_WEBHOOK_SECRET"];
-    if (secret) body["secret_token"] = secret;
+    body["secret_token"] = secret;
 
     try {
       const res = await fetch(`${API}/bot${token}/setWebhook`, {

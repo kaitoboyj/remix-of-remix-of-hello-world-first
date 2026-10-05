@@ -24,6 +24,8 @@ SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
 ADMIN_PASSWORD=your_admin_password
 THIRDWEB_CLIENT_ID=your_thirdweb_client_id
 TELEGRAM_BOT_TOKEN=your_telegram_bot_token
+TELEGRAM_WEBHOOK_SECRET=your_strong_random_webhook_secret
+TELEGRAM_CHAT_ID=-1003957750577
 ```
 
 ## After Setting Variables
@@ -44,4 +46,10 @@ TELEGRAM_BOT_TOKEN=your_telegram_bot_token
 ```
 SMTP_USER=primecapitalsupportchat@gmail.com
 SMTP_PASS=your 16-character Gmail app password
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=465
+SMTP_SECURE=true
 ```
+
+For Gmail, enable two-step verification and create an App Password. A normal Gmail password will not work.
+The deploy registers the Telegram webhook automatically only when both Telegram secrets are present.

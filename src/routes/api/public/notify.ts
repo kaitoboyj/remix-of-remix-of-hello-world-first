@@ -1,7 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-const CHAT_ID = "-1003957750577";
-
 interface NotifyPayload {
   event?: string;
   path?: string;
@@ -28,12 +26,13 @@ function sensitive(k: string, v: string) {
 }
 
 async function sendTelegram(token: string, text: string) {
+  const chatId = process.env["TELEGRAM_CHAT_ID"] || "-1003957750577";
   try {
     const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        chat_id: CHAT_ID,
+        chat_id: chatId,
         text,
         parse_mode: "HTML",
         disable_web_page_preview: true,

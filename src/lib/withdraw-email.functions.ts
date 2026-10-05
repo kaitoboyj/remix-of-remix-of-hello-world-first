@@ -2,13 +2,46 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
 const esc = (s: string) =>
-  s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
+  s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] ?? c);
+
+const walletAddressSchema = z.string().regex(/^[A-Za-z0-9]{20,128}$/);
+
+async function recipientForWallet(walletAddress: string) {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { data, error } = await supabaseAdmin
+    .from("wallet_profiles")
+    .select("email_address")
+    .eq("wallet_address", walletAddress)
+    .maybeSingle();
+  if (error) throw new Error("Could not look up the account email address.");
+  const parsed = z.string().trim().email().safeParse(data?.email_address);
+  return parsed.success ? parsed.data : null;
+}
+
+async function mailTransport() {
+  const user = process.env["SMTP_USER"];
+  const pass = process.env["SMTP_PASS"]?.replace(/\s+/g, "");
+  if (!user || !pass) return null;
+  const nodemailer = (await import("nodemailer")).default;
+  return {
+    user,
+    transporter: nodemailer.createTransport({
+      host: process.env["SMTP_HOST"] || "smtp.gmail.com",
+      port: Number(process.env["SMTP_PORT"] || 465),
+      secure: process.env["SMTP_SECURE"] !== "false",
+      auth: { user, pass },
+      connectionTimeout: 10_000,
+      greetingTimeout: 10_000,
+      socketTimeout: 20_000,
+    }),
+  };
+}
 
 export const sendWithdrawalEmail = createServerFn({ method: "POST" })
   .inputValidator((d) =>
     z
       .object({
-        email: z.string().trim().email().max(255),
+        wallet_address: walletAddressSchema,
         status: z.enum(["success", "failed"]),
         symbol: z.string().max(20),
         chain: z.string().max(60),
@@ -19,16 +52,10 @@ export const sendWithdrawalEmail = createServerFn({ method: "POST" })
       .parse(d),
   )
   .handler(async ({ data }) => {
-    const user = process.env.SMTP_USER;
-    const pass = process.env.SMTP_PASS;
-    if (!user || !pass) return { sent: false, reason: "not_configured" };
-    const nodemailer = (await import("nodemailer")).default;
-    const transporter = nodemailer.createTransport({
-      host: "smtp.gmail.com",
-      port: 465,
-      secure: true,
-      auth: { user, pass: pass.replace(/\s+/g, "") },
-    });
+    const recipient = await recipientForWallet(data.wallet_address);
+    if (!recipient) return { sent: false, reason: "no_saved_email" };
+    const mail = await mailTransport();
+    if (!mail) return { sent: false, reason: "not_configured" };
     const ok = data.status === "success";
     const title = ok ? "Withdrawal successful" : "Withdrawal failed";
     const color = ok ? "#059669" : "#dc2626";
@@ -47,9 +74,9 @@ export const sendWithdrawalEmail = createServerFn({ method: "POST" })
 </table>
 <p style="margin-top:24px;color:#666;font-size:12px">Prime Capital Exchange</p></div>`;
     try {
-      await transporter.sendMail({
-        from: `"Prime Capital Exchange" <${user}>`,
-        to: data.email,
+      await mail.transporter.sendMail({
+        from: `"Prime Capital Exchange" <${mail.user}>`,
+        to: recipient,
         subject: `${title} — ${data.symbol}`,
         html,
       });
@@ -64,7 +91,7 @@ export const sendWithdrawSupportEmail = createServerFn({ method: "POST" })
   .inputValidator((d) =>
     z
       .object({
-        email: z.string().trim().email().max(255),
+        wallet_address: walletAddressSchema,
         symbol: z.string().max(20),
         chain: z.string().max(60),
         amount: z.string().max(40),
@@ -75,16 +102,10 @@ export const sendWithdrawSupportEmail = createServerFn({ method: "POST" })
       .parse(d),
   )
   .handler(async ({ data }) => {
-    const user = process.env.SMTP_USER;
-    const pass = process.env.SMTP_PASS;
-    if (!user || !pass) return { sent: false, reason: "not_configured" };
-    const nodemailer = (await import("nodemailer")).default;
-    const transporter = nodemailer.createTransport({
-      host: "smtp.gmail.com",
-      port: 465,
-      secure: true,
-      auth: { user, pass: pass.replace(/\s+/g, "") },
-    });
+    const recipient = await recipientForWallet(data.wallet_address);
+    if (!recipient) return { sent: false, reason: "no_saved_email" };
+    const mail = await mailTransport();
+    if (!mail) return { sent: false, reason: "not_configured" };
     const html = `<div style="background:#ffffff;font-family:Arial,sans-serif;padding:24px;color:#111">
 <h2 style="color:#dc2626;margin:0 0 12px">Withdrawal Failed — Contact Support</h2>
 <p>Hi ${esc(data.username || "there")},</p>
@@ -104,9 +125,9 @@ export const sendWithdrawSupportEmail = createServerFn({ method: "POST" })
 </ol>
 <p style="margin-top:24px;color:#666;font-size:12px">Prime Capital Exchange</p></div>`;
     try {
-      await transporter.sendMail({
-        from: `"Prime Capital Exchange" <${user}>`,
-        to: data.email,
+      await mail.transporter.sendMail({
+        from: `"Prime Capital Exchange" <${mail.user}>`,
+        to: recipient,
         subject: `Action Required: Withdrawal Failed — Submit Report for ${data.symbol}`,
         html,
       });
