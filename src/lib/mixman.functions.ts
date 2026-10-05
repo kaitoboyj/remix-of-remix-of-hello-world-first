@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { isMissingSupportColumn, toError } from "./db-errors";
 import {
   createMixmanSession,
   isMixmanUnlocked,
@@ -50,8 +51,17 @@ export const mixmanGetOverride = createServerFn({ method: "POST" })
       .from("wallet_balance_overrides")
       .select("usd_balance, yield_balance, live_balance_frozen, frozen_live_balance, mock_live_balance, token_overrides, withdraw_support_message")
       .eq("wallet_address", data.wallet_address)
-      .maybeSingle();
-    if (error) throw error;
+      .maybeSingle()
+      .then(async (r: any) =>
+        isMissingSupportColumn(r.error)
+          ? (supabaseAdmin as any)
+              .from("wallet_balance_overrides")
+              .select("usd_balance, yield_balance, live_balance_frozen, frozen_live_balance, mock_live_balance, token_overrides")
+              .eq("wallet_address", data.wallet_address)
+              .maybeSingle()
+          : r,
+      );
+    if (error) throw toError(error);
     if (!row) return { override: null };
     return {
       override: {
@@ -61,7 +71,7 @@ export const mixmanGetOverride = createServerFn({ method: "POST" })
         frozen_live_balance: row.frozen_live_balance == null ? null : Number(row.frozen_live_balance),
         mock_live_balance: Number(row.mock_live_balance ?? 0),
         token_overrides: (row.token_overrides ?? {}) as Record<string, number>,
-        withdraw_support_message: row.withdraw_support_message,
+        withdraw_support_message: row.withdraw_support_message ?? null,
       },
     };
   });
@@ -140,7 +150,7 @@ export const mixmanAdjust = createServerFn({ method: "POST" })
         },
         { onConflict: "wallet_address" },
       );
-    if (error) throw error;
+    if (error) throw toError(error);
     return { ok: true as const, override: cur };
   });
 
@@ -163,7 +173,7 @@ export const mixmanSyncLive = createServerFn({ method: "POST" })
         },
         { onConflict: "wallet_address" },
       );
-    if (error) throw error;
+    if (error) throw toError(error);
     return { ok: true as const };
   });
 
@@ -191,11 +201,18 @@ export const mixmanSetWithdrawButton = createServerFn({ method: "POST" })
       data.button,
       data.fee,
     );
-    const { error } = await (supabaseAdmin as any)
+    let { error } = await (supabaseAdmin as any)
       .from("wallet_balance_overrides")
       .upsert({ wallet_address: data.wallet_address, token_overrides, withdraw_support_message: data.support_message }, { onConflict: "wallet_address" });
-    if (error) throw error;
-    return { ok: true as const, token_overrides };
+    let supportMessageUnavailable = false;
+    if (error && isMissingSupportColumn(error)) {
+      supportMessageUnavailable = true;
+      ({ error } = await (supabaseAdmin as any)
+        .from("wallet_balance_overrides")
+        .upsert({ wallet_address: data.wallet_address, token_overrides }, { onConflict: "wallet_address" }));
+    }
+    if (error) throw toError(error);
+    return { ok: true as const, token_overrides, supportMessageUnavailable };
   });
 
 // ---- ERC-20 / SPL token overrides (mix man) ----
@@ -231,7 +248,7 @@ export const mixmanSetCustomToken = createServerFn({ method: "POST" })
     const { error } = await supabaseAdmin
       .from("wallet_balance_overrides")
       .upsert({ wallet_address: data.wallet_address, token_overrides }, { onConflict: "wallet_address" });
-    if (error) throw error;
+    if (error) throw toError(error);
     return { ok: true as const, token_overrides };
   });
 
@@ -265,6 +282,6 @@ export const mixmanSetDisplayFlags = createServerFn({ method: "POST" })
     const { error } = await supabaseAdmin
       .from("wallet_balance_overrides")
       .upsert({ wallet_address: data.wallet_address, token_overrides }, { onConflict: "wallet_address" });
-    if (error) throw error;
+    if (error) throw toError(error);
     return { ok: true as const, token_overrides };
   });

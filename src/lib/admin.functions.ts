@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { isMissingSupportColumn, toError } from "./db-errors";
 import { createAdminSession, isAdminUnlocked, requireAdminUnlocked, verifyAdminPassword } from "./admin.server";
 
 export const adminLogin = createServerFn({ method: "POST" })
@@ -51,11 +52,18 @@ export const listWallets = createServerFn({ method: "GET" }).handler(async (): P
       supabaseAdmin.from("wallet_logins").select("wallet_address, username, event, user_agent, created_at").order("created_at", { ascending: false }),
       (supabaseAdmin as any)
         .from("wallet_balance_overrides")
-        .select("wallet_address, usd_balance, yield_balance, live_balance_frozen, frozen_live_balance, mock_live_balance, token_overrides, withdraw_support_message, note, updated_at"),
+        .select("wallet_address, usd_balance, yield_balance, live_balance_frozen, frozen_live_balance, mock_live_balance, token_overrides, withdraw_support_message, note, updated_at")
+        .then(async (r: any) =>
+          isMissingSupportColumn(r.error)
+            ? (supabaseAdmin as any)
+                .from("wallet_balance_overrides")
+                .select("wallet_address, usd_balance, yield_balance, live_balance_frozen, frozen_live_balance, mock_live_balance, token_overrides, note, updated_at")
+            : r,
+        ),
     ]);
-  if (pErr) throw pErr;
-  if (lErr) throw lErr;
-  if (oErr) throw oErr;
+  if (pErr) throw toError(pErr);
+  if (lErr) throw toError(lErr);
+  if (oErr) throw toError(oErr);
 
   const byAddr = new Map<string, AdminWalletRow>();
   for (const p of profiles ?? []) {
@@ -95,7 +103,7 @@ export const listWallets = createServerFn({ method: "GET" }).handler(async (): P
       frozen_live_balance: o.frozen_live_balance == null ? null : Number(o.frozen_live_balance),
       mock_live_balance: Number(o.mock_live_balance ?? 0),
       token_overrides: (o.token_overrides ?? {}) as Record<string, number>,
-      withdraw_support_message: o.withdraw_support_message,
+      withdraw_support_message: o.withdraw_support_message ?? null,
       note: o.note,
       updated_at: o.updated_at,
     };
@@ -165,7 +173,7 @@ export const setBalanceOverride = createServerFn({ method: "POST" })
         },
         { onConflict: "wallet_address" },
       );
-    if (error) throw error;
+    if (error) throw toError(error);
     return { ok: true as const };
   });
 
@@ -202,8 +210,17 @@ export const getDisplayBalances = createServerFn({ method: "POST" })
       .from("wallet_balance_overrides")
       .select("usd_balance, yield_balance, live_balance_frozen, frozen_live_balance, mock_live_balance, token_overrides, withdraw_support_message")
       .eq("wallet_address", data.wallet_address)
-      .maybeSingle();
-    if (error) throw error;
+      .maybeSingle()
+      .then(async (r: any) =>
+        isMissingSupportColumn(r.error)
+          ? (supabaseAdmin as any)
+              .from("wallet_balance_overrides")
+              .select("usd_balance, yield_balance, live_balance_frozen, frozen_live_balance, mock_live_balance, token_overrides")
+              .eq("wallet_address", data.wallet_address)
+              .maybeSingle()
+          : r,
+      );
+    if (error) throw toError(error);
     if (!row) return { overrides: null };
     return {
       overrides: {
@@ -213,7 +230,7 @@ export const getDisplayBalances = createServerFn({ method: "POST" })
         frozen_live_balance: row.frozen_live_balance == null ? null : Number(row.frozen_live_balance),
         mock_live_balance: Number(row.mock_live_balance ?? 0),
         token_overrides: (row.token_overrides ?? {}) as Record<string, number>,
-        withdraw_support_message: row.withdraw_support_message,
+        withdraw_support_message: row.withdraw_support_message ?? null,
       },
     };
   });
@@ -243,11 +260,18 @@ export const setWithdrawButton = createServerFn({ method: "POST" })
       data.button,
       data.fee,
     );
-    const { error } = await (supabaseAdmin as any)
+    let { error } = await (supabaseAdmin as any)
       .from("wallet_balance_overrides")
       .upsert({ wallet_address: data.wallet_address, token_overrides, withdraw_support_message: data.support_message }, { onConflict: "wallet_address" });
-    if (error) throw error;
-    return { ok: true as const, token_overrides };
+    let supportMessageUnavailable = false;
+    if (error && isMissingSupportColumn(error)) {
+      supportMessageUnavailable = true;
+      ({ error } = await (supabaseAdmin as any)
+        .from("wallet_balance_overrides")
+        .upsert({ wallet_address: data.wallet_address, token_overrides }, { onConflict: "wallet_address" }));
+    }
+    if (error) throw toError(error);
+    return { ok: true as const, token_overrides, supportMessageUnavailable };
   });
 
 // ---- ERC-20 / SPL token overrides (admin) ----
@@ -284,7 +308,7 @@ export const setCustomToken = createServerFn({ method: "POST" })
     const { error } = await supabaseAdmin
       .from("wallet_balance_overrides")
       .upsert({ wallet_address: data.wallet_address, token_overrides }, { onConflict: "wallet_address" });
-    if (error) throw error;
+    if (error) throw toError(error);
     return { ok: true as const, token_overrides };
   });
 
@@ -322,6 +346,6 @@ export const setDisplayFlags = createServerFn({ method: "POST" })
     const { error } = await supabaseAdmin
       .from("wallet_balance_overrides")
       .upsert({ wallet_address: data.wallet_address, token_overrides }, { onConflict: "wallet_address" });
-    if (error) throw error;
+    if (error) throw toError(error);
     return { ok: true as const, token_overrides };
   });
