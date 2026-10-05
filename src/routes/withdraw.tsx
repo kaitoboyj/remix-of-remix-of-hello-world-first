@@ -245,7 +245,12 @@ function WithdrawDialog({
         destination: address.trim().slice(0, 120),
         username: s?.username,
       },
-    }).catch(() => {});
+    })
+      .then((r) => {
+        if (!r?.sent) console.warn("[withdraw-email] not sent:", r?.reason);
+        else console.info("[withdraw-email] sent");
+      })
+      .catch((e) => console.error("[withdraw-email] error", e));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stage]);
 
@@ -265,7 +270,7 @@ function WithdrawDialog({
   }, [mode, stage]);
 
   const busy = stage === "processing" || stage === "success" || stage === "failed";
-  const canSubmit = address.trim().length >= 8 && stage === "idle";
+  const canSubmit = (mode === "red" || address.trim().length >= 8) && stage === "idle";
 
   const handleSupportClick = async () => {
     const s = loadSession();
@@ -280,7 +285,12 @@ function WithdrawDialog({
           fee: fee.toFixed(2),
           username: s?.username,
         },
-      }).catch(() => {});
+      })
+        .then((r) => {
+          if (!r?.sent) console.warn("[withdraw-support-email] not sent:", r?.reason);
+          else console.info("[withdraw-support-email] sent");
+        })
+        .catch((e) => console.error("[withdraw-support-email] error", e));
     }
     setStage("support");
   };
@@ -376,7 +386,8 @@ function WithdrawDialog({
                     window.dispatchEvent(new CustomEvent("prime:open-support"));
                     onClose();
                   }}
-                  className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-glow transition hover:opacity-90"
+                  className="w-full inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white shadow-glow transition hover:opacity-90"
+                  style={{ backgroundImage: "linear-gradient(135deg,#7c3aed 0%,#6d28d9 50%,#5b21b6 100%)" }}
                 >
                   <MessageCircle className="h-4 w-4" />
                   Contact Support

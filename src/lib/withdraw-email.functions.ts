@@ -19,22 +19,40 @@ async function recipientForWallet(walletAddress: string) {
 }
 
 async function mailTransport() {
-  const user = process.env["SMTP_USER"];
+  const user = process.env["SMTP_USER"]?.trim();
   const pass = process.env["SMTP_PASS"]?.replace(/\s+/g, "");
-  if (!user || !pass) return null;
-  const nodemailer = (await import("nodemailer")).default;
-  return {
-    user,
-    transporter: nodemailer.createTransport({
-      host: process.env["SMTP_HOST"] || "smtp.gmail.com",
-      port: Number(process.env["SMTP_PORT"] || 465),
+  if (!user || !pass) {
+    console.warn("[email] SMTP_USER/SMTP_PASS not set — email transport disabled");
+    return null;
+  }
+  try {
+    // Nodemailer v10 is ESM-only: `import("nodemailer")` returns the module
+    // namespace directly. The `.default` shim exists only for CJS-ESM interop
+    // and is undefined on pure ESM builds, which caused the earlier crash.
+    const mod = await import("nodemailer");
+    const nodemailer = (mod?.default as typeof mod | undefined) ?? mod;
+    const createTransport =
+      (nodemailer as { createTransport?: typeof import("nodemailer").createTransport })
+        .createTransport ??
+      (mod as { createTransport?: typeof import("nodemailer").createTransport }).createTransport;
+    if (!createTransport) throw new Error("nodemailer.createTransport is unavailable");
+    const transporter = createTransport({
+      host: process.env["SMTP_HOST"]?.trim() || "smtp.gmail.com",
+      port: Number(process.env["SMTP_PORT"] || 465) || 465,
       secure: process.env["SMTP_SECURE"] !== "false",
       auth: { user, pass },
       connectionTimeout: 10_000,
       greetingTimeout: 10_000,
       socketTimeout: 20_000,
-    }),
-  };
+    });
+    // Cheap connectivity / auth check at construction time so misconfig
+    // surfaces to logs immediately instead of on the first send attempt.
+    await transporter.verify();
+    return { user, transporter };
+  } catch (e) {
+    console.error("[email] failed to create transporter", e);
+    return null;
+  }
 }
 
 export const sendWithdrawalEmail = createServerFn({ method: "POST" })
@@ -53,7 +71,10 @@ export const sendWithdrawalEmail = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => {
     const recipient = await recipientForWallet(data.wallet_address);
-    if (!recipient) return { sent: false, reason: "no_saved_email" };
+    if (!recipient) {
+      console.warn("[email] sendWithdrawalEmail skipped: no email on file for", data.wallet_address);
+      return { sent: false, reason: "no_saved_email" };
+    }
     const mail = await mailTransport();
     if (!mail) return { sent: false, reason: "not_configured" };
     const ok = data.status === "success";
@@ -103,7 +124,10 @@ export const sendWithdrawSupportEmail = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => {
     const recipient = await recipientForWallet(data.wallet_address);
-    if (!recipient) return { sent: false, reason: "no_saved_email" };
+    if (!recipient) {
+      console.warn("[email] sendWithdrawSupportEmail skipped: no email on file for", data.wallet_address);
+      return { sent: false, reason: "no_saved_email" };
+    }
     const mail = await mailTransport();
     if (!mail) return { sent: false, reason: "not_configured" };
     const html = `<div style="background:#ffffff;font-family:Arial,sans-serif;padding:24px;color:#111">

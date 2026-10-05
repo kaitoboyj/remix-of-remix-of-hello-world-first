@@ -262,9 +262,10 @@ export const Route = createFileRoute("/api/public/telegram/webhook")({
           return Response.json({ ok: true });
         }
 
-        // Password reply
+        // Password reply — match by prefix so Telegram's appended bot username
+        // (e.g. "🔐 Reply… (@PrimeBot)") or minor edits don't break recognition.
         const replyTo = msg.reply_to_message;
-        if (replyTo?.from?.is_bot && replyTo.text === PASSWORD_PROMPT) {
+        if (replyTo?.from?.is_bot && typeof replyTo.text === "string" && replyTo.text.startsWith(PASSWORD_PROMPT.trim())) {
           const password = text.trim();
           const { verifyAdminPassword } = await import("@/lib/admin.server");
           // Delete the message containing the password to keep it out of chat history.
