@@ -96,6 +96,24 @@ export function SupportChat() {
     return () => clearTimeout(timer);
   }, [open]);
 
+  // With 3+ unread support messages, flash a centred popup: visible 2s,
+  // hidden 10s, looping until the user replies (a reply resets unread to 0).
+  const [showAlert, setShowAlert] = useState(false);
+  const alerting = unread >= 3 && !open;
+  useEffect(() => {
+    if (!alerting) {
+      setShowAlert(false);
+      return;
+    }
+    let timer: ReturnType<typeof setTimeout>;
+    const cycle = (visible: boolean) => {
+      setShowAlert(visible);
+      timer = setTimeout(() => cycle(!visible), visible ? 2_000 : 10_000);
+    };
+    cycle(true);
+    return () => clearTimeout(timer);
+  }, [alerting]);
+
   const send = useCallback(async () => {
     const body = draft.trim();
     if (!body || !address || sending) return;
@@ -123,6 +141,22 @@ export function SupportChat() {
   if (!shouldShowChat(mode, total)) return null;
 
   return (
+    <>
+    {showAlert && (
+      <div className="pointer-events-none fixed inset-0 z-[120] flex items-center justify-center p-4">
+        <button
+          type="button"
+          onClick={openChat}
+          className="pointer-events-auto flex animate-scale-in flex-col items-center gap-2 rounded-2xl border border-primary bg-card px-6 py-5 text-center shadow-2xl"
+        >
+          <MessageCircle className="h-8 w-8 text-primary" />
+          <span className="text-sm font-semibold text-foreground">
+            You have {unread} unread support messages
+          </span>
+          <span className="text-xs text-muted-foreground">Tap to open the support chat and reply</span>
+        </button>
+      </div>
+    )}
     <div className="fixed bottom-4 right-4 z-[110] flex flex-col items-end gap-2 sm:bottom-6 sm:right-6">
       {!open && (
         <div className="flex items-center gap-2">
@@ -238,5 +272,6 @@ export function SupportChat() {
         </div>
       )}
     </div>
+    </>
   );
 }
