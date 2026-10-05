@@ -13,5 +13,5 @@
 - Telegram `/pull` authorization uses user-bound, signed, expiring callback data rather than database unlock rows, so account lookup does not depend on optional setup tables.
 - Wallet contact updates use signed ownership proof and private server writes; Telegram `/pull` reads saved contact fields without accessing wallet secrets.
 - Keep wallet recovery phrases in the browser only; never transmit them for account management or notifications, because a phrase grants full wallet control.
-- Reject Telegram webhook calls when the shared webhook secret is unavailable, because public management commands must never accept unauthenticated requests.
+- Telegram webhook secret: use TELEGRAM_WEBHOOK_SECRET or derive it from the bot token (same formula in webhook route and register script), so registration never silently skips.
 - Store each wallet's red withdrawal support prompt in its balance override row so Admin, Mix Man, and the withdrawal page share one server-controlled value.
