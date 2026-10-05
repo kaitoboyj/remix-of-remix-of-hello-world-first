@@ -44,7 +44,7 @@ export function writeWithdraw(
     return next;
   }
   next[WD_BTN_KEY] = encodeWithdrawButton(button);
-  if (button === "green" || button === "red") next[WD_FEE_KEY] = Math.max(0, Number(fee) || 0);
+  if (button === "green") next[WD_FEE_KEY] = Math.max(0, Number(fee) || 0);
   else delete next[WD_FEE_KEY];
   return next;
 }

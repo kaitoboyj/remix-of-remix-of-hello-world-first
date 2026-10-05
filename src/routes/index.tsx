@@ -212,10 +212,6 @@ function WithdrawCta({
   void yieldValue;
 
   if (button === "green" || button === "red") {
-    const linkStyle =
-      button === "red"
-        ? undefined
-        : undefined;
     const linkClass =
       button === "green"
         ? "inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-6 py-3 text-sm font-semibold text-white shadow-glow transition hover:opacity-90"
@@ -225,7 +221,6 @@ function WithdrawCta({
         <Link
           to="/withdraw"
           className={linkClass}
-          style={linkStyle}
         >
           <Wallet2 className="h-4 w-4" /> Withdraw
         </Link>
