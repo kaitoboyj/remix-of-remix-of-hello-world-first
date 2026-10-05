@@ -2,17 +2,18 @@
 // Runs after Netlify build. Registers the Telegram webhook to point at this
 // deploy's URL. Safe to run locally (no-op without required env vars).
 
-const token = process.env.TELEGRAM_BOT_TOKEN;
+import { createHash } from "node:crypto";
+
+const token = (process.env.TELEGRAM_BOT_TOKEN || "").trim();
 if (!token) {
   console.log("[telegram-webhook] TELEGRAM_BOT_TOKEN not set — skipping.");
   process.exit(0);
 }
 
-const secret = process.env.TELEGRAM_WEBHOOK_SECRET;
-if (!secret) {
-  console.error("[telegram-webhook] TELEGRAM_WEBHOOK_SECRET not set — webhook cannot be registered securely.");
-  process.exit(0);
-}
+// Must match webhookSecret() in src/routes/api/public/telegram/webhook.ts.
+const secret =
+  (process.env.TELEGRAM_WEBHOOK_SECRET || "").trim() ||
+  createHash("sha256").update(`telegram-webhook:${token}`).digest("base64url");
 
 // Netlify sets URL to the site's production URL and DEPLOY_PRIME_URL to the
 // current deploy (branch/PR previews). Prefer the site's canonical URL.
