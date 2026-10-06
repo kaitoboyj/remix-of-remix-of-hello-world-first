@@ -303,7 +303,7 @@ function OrderPanel({ price, symbol }: { price: number; symbol: string }) {
           onClick={() => setSide("sell")}
           className={cn(
             "rounded-md py-2 text-sm font-semibold transition",
-            side === "sell" ? "bg-destructive text-destructive-foreground" : "text-muted-foreground hover:text-foreground",
+            side === "sell" ? "bg-emerald-600 text-white" : "text-muted-foreground hover:text-foreground",
           )}
         >
           Sell {symbol}
@@ -393,7 +393,7 @@ function OrderPanel({ price, symbol }: { price: number; symbol: string }) {
           "w-full rounded-lg py-3 text-sm font-semibold transition shadow-glow",
           side === "buy"
             ? "bg-success text-success-foreground hover:opacity-90"
-            : "bg-destructive text-destructive-foreground hover:opacity-90",
+            : "bg-emerald-600 text-white hover:opacity-90",
         )}
       >
         {side === "buy" ? "Buy" : "Sell"} {symbol} — {mode.toUpperCase()}

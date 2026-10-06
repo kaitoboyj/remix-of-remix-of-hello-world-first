@@ -45,12 +45,12 @@ export function WithdrawButtonControl({
             : current === "blue"
               ? "blue"
               : current === "red"
-                ? "red (support)"
+                ? "support (green)"
                 : `green · fee $${currentFee.toLocaleString()}`}
         </span>
       </div>
       <p className="mt-1 text-[11px] text-muted-foreground">
-        Only one button shows at a time. Green requires a fee amount. Red opens support and does not require a fee.
+        Only one button shows at a time. Green requires a fee amount. The support button opens support and does not require a fee.
       </p>
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <input
@@ -95,7 +95,7 @@ export function WithdrawButtonControl({
         </button>
       </div>
       <label className="mt-3 block text-[11px] text-muted-foreground">
-        Red-mode support message
+        Support button message
         <textarea
           value={supportMessage}
           onChange={(e) => setSupportMessage(e.target.value)}

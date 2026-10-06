@@ -227,7 +227,7 @@ function Inbox({ onLock }: { onLock: () => void }) {
                   <p className="flex items-center justify-between gap-2 text-sm font-medium text-foreground">
                     <span className="truncate">{t.username || "guest"}</span>
                     {t.unread_admin > 0 && (
-                      <span className="rounded-full bg-destructive px-1.5 text-[10px] font-bold text-destructive-foreground">
+                      <span className="rounded-full bg-emerald-600 px-1.5 text-[10px] font-bold text-white">
                         {t.unread_admin}
                       </span>
                     )}
