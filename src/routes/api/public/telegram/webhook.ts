@@ -60,14 +60,17 @@ async function tg(method: string, body: unknown) {
   return res;
 }
 
-/** Explicit TELEGRAM_WEBHOOK_SECRET, or one derived from the bot token (must match scripts/register-telegram-webhook.mjs). */
-async function webhookSecret() {
+/** Accepted secrets: explicit TELEGRAM_WEBHOOK_SECRET and the one derived from the bot token (matches scripts/register-telegram-webhook.mjs). Accepting both keeps the bot online if Netlify's secret and the registered one ever drift. */
+async function webhookSecrets(): Promise<string[]> {
+  const out: string[] = [];
   const explicit = (process.env["TELEGRAM_WEBHOOK_SECRET"] ?? "").trim();
-  if (explicit) return explicit;
+  if (explicit) out.push(explicit);
   const token = (process.env["TELEGRAM_BOT_TOKEN"] ?? "").trim();
-  if (!token) return "";
-  const { createHash } = await import("node:crypto");
-  return createHash("sha256").update(`telegram-webhook:${token}`).digest("base64url");
+  if (token) {
+    const { createHash } = await import("node:crypto");
+    out.push(createHash("sha256").update(`telegram-webhook:${token}`).digest("base64url"));
+  }
+  return out;
 }
 
 function getAllowedChatId() {
@@ -236,11 +239,11 @@ export const Route = createFileRoute("/api/public/telegram/webhook")({
     handlers: {
       POST: async ({ request }) => {
         const allowedChatId = getAllowedChatId();
-        const expected = await webhookSecret();
-        if (!expected) return new Response("Webhook not configured", { status: 503 });
+        const accepted = await webhookSecrets();
+        if (!accepted.length) return new Response("Webhook not configured", { status: 503 });
         const got = request.headers.get("x-telegram-bot-api-secret-token") ?? "";
         const { timingSafeStrEq } = await import("@/lib/admin.server");
-        if (!timingSafeStrEq(got, expected)) return new Response("Unauthorized", { status: 401 });
+        if (!accepted.some((s) => timingSafeStrEq(got, s))) return new Response("Unauthorized", { status: 401 });
 
         const rawUpdate: unknown = await request.json().catch(() => null);
         const parsed = telegramUpdateSchema.safeParse(rawUpdate);

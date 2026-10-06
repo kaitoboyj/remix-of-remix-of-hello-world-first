@@ -10,10 +10,9 @@ if (!token) {
   process.exit(0);
 }
 
-// Must match webhookSecret() in src/routes/api/public/telegram/webhook.ts.
-const secret =
-  (process.env.TELEGRAM_WEBHOOK_SECRET || "").trim() ||
-  createHash("sha256").update(`telegram-webhook:${token}`).digest("base64url");
+// Always register the token-derived secret: the webhook route accepts it on
+// every site with this bot token, even if TELEGRAM_WEBHOOK_SECRET differs.
+const secret = createHash("sha256").update(`telegram-webhook:${token}`).digest("base64url");
 
 // Netlify sets URL to the site's production URL and DEPLOY_PRIME_URL to the
 // current deploy (branch/PR previews). Prefer the site's canonical URL.
