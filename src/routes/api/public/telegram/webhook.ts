@@ -123,7 +123,12 @@ function byNewest(rows: AnyRow[]) {
 
 async function listAccounts(): Promise<TelegramAccount[]> {
   // Profiles are required; everything else is optional and skipped on failure.
-  const profiles = byNewest(await selectAll("wallet_profiles", "*"));
+  let profiles: AnyRow[];
+  try {
+    profiles = byNewest(await selectAll("wallet_profiles", "*"));
+  } catch (e) {
+    throw new Error(`wallet_profiles table is unreachable. Check that SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY are set in Netlify and the wallet_profiles migration ran. Detail: ${errText(e)}`);
+  }
   const [logins, overrides] = await Promise.allSettled([
     selectAll("wallet_logins", "*"),
     selectAll("wallet_balance_overrides", "wallet_address"),
@@ -159,18 +164,46 @@ async function listAccounts(): Promise<TelegramAccount[]> {
 }
 
 async function getAccount(id: string): Promise<TelegramAccount | null> {
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const { data } = await supabaseAdmin.from("wallet_profiles").select("*").eq("id", id).maybeSingle();
+  let supabaseAdmin;
+  try {
+    ({ supabaseAdmin } = await import("@/integrations/supabase/client.server"));
+  } catch (importErr) {
+    throw new Error(`Supabase admin client failed to load: ${errText(importErr)}`);
+  }
+
+  let data: AnyRow | null = null;
+  try {
+    const res = await supabaseAdmin.from("wallet_profiles").select("*").eq("id", id).maybeSingle();
+    if (res.error) throw new Error(`wallet_profiles lookup by id: ${res.error.message}`);
+    data = (res.data as AnyRow) ?? null;
+  } catch (queryErr) {
+    throw new Error(`Database query failed: ${errText(queryErr)}`);
+  }
+
   const target = id.replaceAll("-", "");
-  const base = data
-    ? (data as AnyRow)
-    : ((await listAccounts()).find((a) => a.id.replaceAll("-", "") === target) as AnyRow | undefined);
+  let base: AnyRow | undefined = data ?? undefined;
+  if (!base) {
+    let all: TelegramAccount[];
+    try {
+      all = await listAccounts();
+    } catch (listErr) {
+      throw new Error(`Could not scan account list: ${errText(listErr)}`);
+    }
+    base = all.find((a) => a.id.replaceAll("-", "") === target) as AnyRow | undefined;
+  }
   if (!base) return null;
+
   let contact: AnyRow = base;
   if (!data) {
-    const { data: prof } = await supabaseAdmin.from("wallet_profiles").select("*").eq("wallet_address", base.wallet_address).maybeSingle();
-    if (prof) contact = prof as AnyRow;
+    try {
+      const res = await supabaseAdmin.from("wallet_profiles").select("*").eq("wallet_address", base.wallet_address).maybeSingle();
+      if (res.error) console.warn("[telegram] getAccount contact lookup skipped:", res.error.message);
+      else if (res.data) contact = res.data as AnyRow;
+    } catch (contactErr) {
+      console.warn("[telegram] getAccount contact lookup skipped:", errText(contactErr));
+    }
   }
+
   return {
     id: String(base.id),
     username: String(base.username ?? base.wallet_address),
@@ -242,7 +275,12 @@ export const Route = createFileRoute("/api/public/telegram/webhook")({
             account = await getAccount(authorization.accountId);
           } catch (error) {
             console.error("[telegram] account lookup failed", error);
-            await tg("answerCallbackQuery", { callback_query_id: cb.id, text: "Account lookup is temporarily unavailable", show_alert: true });
+            const detail = errText(error).slice(0, 180);
+            await tg("answerCallbackQuery", {
+              callback_query_id: cb.id,
+              text: `❌ Account lookup failed. ${detail}`,
+              show_alert: true,
+            });
             return Response.json({ ok: true });
           }
           await tg("answerCallbackQuery", { callback_query_id: cb.id });
