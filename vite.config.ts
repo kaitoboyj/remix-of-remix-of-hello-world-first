@@ -15,7 +15,8 @@ export default defineConfig({
   tanstackStart: {
     server: { entry: "server" },
   },
-  nitro: { preset: "netlify" },
+  // Netlify builds (NETLIFY=true) use the Netlify preset; Lovable hosting uses its default.
+  ...(process.env.NETLIFY || process.env.NITRO_PRESET === "netlify" ? { nitro: { preset: "netlify" } } : {}),
   vite: {
     plugins: [polyfills],
     build: {
