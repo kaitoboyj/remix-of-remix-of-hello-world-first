@@ -367,7 +367,7 @@ function WithdrawDialog({
                   type="button"
                   onClick={handleSupportClick}
                   className="w-full inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white shadow-glow transition hover:opacity-90"
-                  style={{ backgroundImage: "linear-gradient(135deg,#ef4444 0%,#dc2626 50%,#991b1b 100%)" }}
+                  style={{ backgroundImage: "linear-gradient(135deg,#10b981 0%,#059669 50%,#047857 100%)" }}
                 >
                   Support
                 </button>
@@ -375,7 +375,7 @@ function WithdrawDialog({
             )}
             {stage === "support" && (
               <div className="w-full space-y-3">
-                <div className="w-full rounded-xl border border-red-500/30 bg-red-500/10 p-4 overflow-hidden">
+                <div className="w-full rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 overflow-hidden">
                   <p className="text-sm text-muted-foreground break-words">
                     {supportMessage || DEFAULT_WITHDRAW_SUPPORT_MESSAGE}
                   </p>

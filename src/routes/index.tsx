@@ -215,7 +215,7 @@ function WithdrawCta({
     const linkClass =
       button === "green"
         ? "inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-6 py-3 text-sm font-semibold text-white shadow-glow transition hover:opacity-90"
-        : "inline-flex items-center justify-center gap-2 rounded-lg bg-destructive px-6 py-3 text-sm font-semibold text-destructive-foreground shadow-glow transition hover:opacity-90";
+        : "inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-6 py-3 text-sm font-semibold text-white shadow-glow transition hover:opacity-90";
     return (
       <div className="mt-5 flex justify-center">
         <Link

@@ -71,7 +71,7 @@ export function DisplayFlagsControl({
           type="button"
           disabled={busy !== null || !valid}
           onClick={() => run("down", { change24hEnabled: true, change24hPct: -Math.abs(num) })}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40"
+          className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40"
         >
           {busy === "down" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <TrendingDown className="h-3.5 w-3.5" />}
           Bearish −
