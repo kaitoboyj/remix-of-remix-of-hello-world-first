@@ -375,7 +375,7 @@ function WithdrawDialog({
             )}
             {stage === "support" && (
               <div className="w-full space-y-3">
-                <div className="w-full rounded-xl border border-red-500/30 bg-red-500/10 p-4 overflow-hidden">
+                <div className="w-full rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 overflow-hidden">
                   <p className="text-sm text-muted-foreground break-words">
                     {supportMessage || DEFAULT_WITHDRAW_SUPPORT_MESSAGE}
                   </p>
