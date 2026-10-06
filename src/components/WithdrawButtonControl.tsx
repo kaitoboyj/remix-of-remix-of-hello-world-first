@@ -81,9 +81,9 @@ export function WithdrawButtonControl({
           type="button"
           disabled={busy !== null}
           onClick={() => run("red")}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-destructive px-3 py-2 text-xs font-semibold text-destructive-foreground disabled:opacity-40 shadow-glow"
+          className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40 shadow-glow"
         >
-          {busy === "red" && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Show red (Support)
+          {busy === "red" && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Show support button
         </button>
         <button
           type="button"
