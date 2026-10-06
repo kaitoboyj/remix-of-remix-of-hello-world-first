@@ -5,3 +5,5 @@
 - [ ] Confirm live Telegram delivery and `/pull` after the bot token is replaced and a webhook secret is configured.
 - [x] Repair Telegram `/pull` account discovery and pagination.
 - [x] Make red withdrawal support fee-independent with an editable per-wallet message.
+- [ ] Telegram bot hosted on Lovable (minimal-web-debut.lovable.app) — fix 500
+- [ ] pmc.exchange notifications reach the bot
