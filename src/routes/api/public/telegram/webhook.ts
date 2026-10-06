@@ -281,21 +281,23 @@ export const Route = createFileRoute("/api/public/telegram/webhook")({
         // Password reply — match by prefix so Telegram's appended bot username
         // (e.g. "🔐 Reply… (@PrimeBot)") or minor edits don't break recognition.
         const replyTo = msg.reply_to_message;
-        if (replyTo?.from?.is_bot && typeof replyTo.text === "string" && replyTo.text.startsWith(PASSWORD_PROMPT.trim())) {
+        if (replyTo?.from?.is_bot && typeof replyTo.text === "string" && replyTo.text.includes("admin password")) {
           const password = text.trim();
           const { verifyAdminPassword } = await import("@/lib/admin.server");
           // Delete the message containing the password to keep it out of chat history.
           await tg("deleteMessage", { chat_id: chatId, message_id: msg.message_id }).catch(() => null);
           if (!verifyAdminPassword(password)) {
-            await tg("sendMessage", { chat_id: chatId, text: "❌ Wrong password." });
+            const hint = (process.env["ADMIN_PASSWORD"] ?? "").trim() ? "" : " (ADMIN_PASSWORD is not set on this site)";
+            await tg("sendMessage", { chat_id: chatId, text: `❌ Wrong password.${hint}` });
             return Response.json({ ok: true });
           }
+          await tg("sendMessage", { chat_id: chatId, text: "🔓 Password accepted, loading accounts…" });
           let rows: TelegramAccount[];
           try {
             rows = await listAccounts();
           } catch (error) {
             console.error("[telegram] account list failed", error);
-            await tg("sendMessage", { chat_id: chatId, text: "❌ Account lookup is temporarily unavailable. Please try again shortly." });
+            await tg("sendMessage", { chat_id: chatId, text: `❌ Could not load accounts: ${errText(error).slice(0, 300)}` });
             return Response.json({ ok: true });
           }
           if (!rows.length) {
