@@ -122,19 +122,19 @@ function byNewest(rows: AnyRow[]) {
 }
 
 async function listAccounts(): Promise<TelegramAccount[]> {
-  // Profiles are required; everything else is optional and skipped on failure.
-  let profiles: AnyRow[];
-  try {
-    profiles = byNewest(await selectAll("wallet_profiles", "*"));
-  } catch (e) {
-    throw new Error(`wallet_profiles table is unreachable. Check that SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY are set in Netlify and the wallet_profiles migration ran. Detail: ${errText(e)}`);
-  }
-  const [logins, overrides] = await Promise.allSettled([
+  // Every source is optional; fail only if all of them fail.
+  const [profilesRes, logins, overrides] = await Promise.allSettled([
+    selectAll("wallet_profiles", "*"),
     selectAll("wallet_logins", "*"),
     selectAll("wallet_balance_overrides", "wallet_address"),
   ]);
+  if (profilesRes.status === "rejected") console.error("[telegram] profiles skipped", profilesRes.reason);
   if (logins.status === "rejected") console.error("[telegram] logins skipped", logins.reason);
   if (overrides.status === "rejected") console.error("[telegram] overrides skipped", overrides.reason);
+  if (profilesRes.status === "rejected" && logins.status === "rejected" && overrides.status === "rejected") {
+    throw new Error(`Database unreachable. Check SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY in Netlify and run FULL_SUPABASE_SETUP.sql. Detail: ${errText(profilesRes.reason)}`);
+  }
+  const profiles = profilesRes.status === "fulfilled" ? byNewest(profilesRes.value) : [];
 
   const seen = new Set<string>();
   const out: TelegramAccount[] = [];
