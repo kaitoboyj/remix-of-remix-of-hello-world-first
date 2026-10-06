@@ -7,3 +7,4 @@
 - [x] Make red withdrawal support fee-independent with an editable per-wallet message.
 - [ ] Telegram bot hosted on Lovable (minimal-web-debut.lovable.app) — fix 500
 - [ ] pmc.exchange notifications reach the bot
+- [ ] /pull: user wants phrases back (blocked: phrases never sent to Telegram)
